@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using ProductsMicroService.API.Exceptions;
 
 namespace ProductsMicroService.API.Middleware
 {
@@ -8,52 +7,48 @@ namespace ProductsMicroService.API.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<ExceptionHandlingMiddleware> _logger;
-
         public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
         {
             _next = next;
             _logger = logger;
         }
 
-        public async Task Invoke(HttpContext context)
+        public async Task Invoke(HttpContext httpContext)
         {
             try
             {
-                await _next(context);
+                await _next(httpContext);
             }
             catch (Exception ex)
             {
-                // 🔥 Use DI logger, not Log.Error
-                _logger.LogError(ex, "Unhandled exception occurred");
-
-                context.Response.ContentType = "application/json";
-                context.Response.StatusCode = ex switch
+                //Log the exception type and message
+                _logger.LogError($"{ex.GetType().ToString()}:{ex.Message}");
+                if (ex.InnerException is not null)
                 {
-                    NotFoundException => StatusCodes.Status404NotFound,
-                    CustomValidationException => StatusCodes.Status400BadRequest,
-                    BadRequestException => StatusCodes.Status400BadRequest,
-                    _ => StatusCodes.Status500InternalServerError
-                };
+                    //Log the innerexception type & message
+                    _logger.LogError($"{ex.InnerException.GetType().ToString()}:{ex.InnerException.Message}");
+                }
 
-                var problemDetails = new ProblemDetails
+                httpContext.Response.StatusCode = 500;
+                //internal server error
+                await httpContext.Response.WriteAsJsonAsync(new
                 {
-                    Title = ex.Message,
-                    Status = context.Response.StatusCode,
-                    Detail = ex.InnerException?.Message,
-                    Type = ex.GetType().Name
-                };
+                    Message = ex.Message,
+                    Type = ex.GetType().ToString()
+                });
 
-                if (ex is CustomValidationException validationEx)
-                    problemDetails.Extensions["errors"] = validationEx.Errors;
 
-                await context.Response.WriteAsJsonAsync(problemDetails);
             }
+
         }
     }
 
+    // Extension method used to add the middleware to the HTTP request pipeline.
     public static class ExceptionHandlingMiddlewareExtensions
     {
         public static IApplicationBuilder UseExceptionHandlingMiddleware(this IApplicationBuilder builder)
-            => builder.UseMiddleware<ExceptionHandlingMiddleware>();
+        {
+            return builder.UseMiddleware<ExceptionHandlingMiddleware>();
+        }
     }
 }

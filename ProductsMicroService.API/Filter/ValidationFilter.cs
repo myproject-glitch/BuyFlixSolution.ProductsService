@@ -1,9 +1,9 @@
 ﻿using FluentValidation;
 using Microsoft.AspNetCore.Mvc.Filters;
-using ProductsMicroService.API.Exceptions;
 using System.Linq;
 using System.Collections.Generic;
 using FluentValidation.Results;
+using Microsoft.AspNetCore.Mvc;
 
 namespace ProductsMicroService.API.Filter
 {
@@ -26,16 +26,21 @@ namespace ProductsMicroService.API.Filter
                 dynamic? validator = _serviceProvider.GetService(validatorType);
                 if (validator == null) continue;
 
-                // Validate argument
-                var validationResult = await validator.ValidateAsync((dynamic)argument);
+                FluentValidation.Results.ValidationResult validationResult = await validator.ValidateAsync((dynamic)argument);
 
                 if (!validationResult.IsValid)
                 {
-                    // Cast Errors to IEnumerable<ValidationFailure> to allow LINQ
-                    IEnumerable<ValidationFailure> errorsList = (IEnumerable<ValidationFailure>)validationResult.Errors;
-                    var errors = errorsList.Select(e => $"{e.PropertyName}: {e.ErrorMessage}").ToList();
-
-                    throw new CustomValidationException(errors);
+                    context.Result = new BadRequestObjectResult(new
+                    {
+                        Success = false,
+                        Errors = validationResult.Errors
+                            .GroupBy(e => e.PropertyName)
+                            .ToDictionary(
+                                g => g.Key,
+                                g => g.Select(e => e.ErrorMessage).ToList()
+                            )
+                    });
+                    return;
                 }
             }
 

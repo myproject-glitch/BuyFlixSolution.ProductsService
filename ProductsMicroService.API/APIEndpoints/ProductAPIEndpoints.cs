@@ -2,7 +2,7 @@
 using BusinessLogicLayer.ServiceContracts;
 using FluentValidation;
 using FluentValidation.Results;
-using MySqlX.XDevAPI.Common;
+using Microsoft.EntityFrameworkCore;
 
 namespace ProductsMicroService.API.APIEndpoints
 {
@@ -26,14 +26,19 @@ namespace ProductsMicroService.API.APIEndpoints
             });
 
 
-            //GET /api/products/search/xxxxxxxxxxxxxxxxxx
+            //GET /api/products/search/xxxxxxxxxxxxxxx
+            //⭐ FIXED — with EF.Functions.Like to prevent collation & mapping errors in MySQL
             app.MapGet("/api/products/search/{SearchString}", async (IProductsService productsService, string SearchString) =>
             {
-                List<ProductResponse?> productsByProductName = await productsService.GetProductsByCondition(temp => temp.ProductName != null && temp.ProductName.Contains(SearchString, StringComparison.OrdinalIgnoreCase));
+                List<ProductResponse?> productsByProductName =
+                    await productsService.GetProductsByCondition(temp => temp.ProductName != null &&
+                        EF.Functions.Like(temp.ProductName!, $"%{SearchString}%"));
 
-                List<ProductResponse?> productsByCategory = await productsService.GetProductsByCondition(temp => temp.Category != null && temp.Category.Contains(SearchString, StringComparison.OrdinalIgnoreCase));
+                List<ProductResponse?> productsByCategory =
+                    await productsService.GetProductsByCondition(temp => temp.Category != null &&
+                        EF.Functions.Like(temp.Category!, $"%{SearchString}%"));
 
-                var products = productsByProductName.Union(productsByCategory);
+                var products = productsByProductName.Concat(productsByCategory).Distinct().ToList();
 
                 return Results.Ok(products);
             });
@@ -42,10 +47,8 @@ namespace ProductsMicroService.API.APIEndpoints
             //POST /api/products
             app.MapPost("/api/products", async (IProductsService productsService, IValidator<ProductAddRequest> productAddRequestValidator, ProductAddRequest productAddRequest) =>
             {
-                //Validate the ProductAddRequest object using Fluent Validation
                 ValidationResult validationResult = await productAddRequestValidator.ValidateAsync(productAddRequest);
 
-                //Check the validation result
                 if (!validationResult.IsValid)
                 {
                     Dictionary<string, string[]> errors = validationResult.Errors
@@ -54,7 +57,6 @@ namespace ProductsMicroService.API.APIEndpoints
                         grp => grp.Select(err => err.ErrorMessage).ToArray());
                     return Results.ValidationProblem(errors);
                 }
-
 
                 var addedProductResponse = await productsService.AddProduct(productAddRequest);
                 if (addedProductResponse != null)
@@ -67,10 +69,8 @@ namespace ProductsMicroService.API.APIEndpoints
             //PUT /api/products
             app.MapPut("/api/products", async (IProductsService productsService, IValidator<ProductUpdateRequest> productUpdateRequestValidator, ProductUpdateRequest productUpdateRequest) =>
             {
-                //Validate the ProductUpdateRequest object using Fluent Validation
                 ValidationResult validationResult = await productUpdateRequestValidator.ValidateAsync(productUpdateRequest);
 
-                //Check the validation result
                 if (!validationResult.IsValid)
                 {
                     Dictionary<string, string[]> errors = validationResult.Errors
@@ -79,7 +79,6 @@ namespace ProductsMicroService.API.APIEndpoints
                         grp => grp.Select(err => err.ErrorMessage).ToArray());
                     return Results.ValidationProblem(errors);
                 }
-
 
                 var updatedProductResponse = await productsService.UpdateProduct(productUpdateRequest);
                 if (updatedProductResponse != null)
@@ -98,6 +97,7 @@ namespace ProductsMicroService.API.APIEndpoints
                 else
                     return Results.Problem("Error in deleting product");
             });
+
             return app;
         }
     }

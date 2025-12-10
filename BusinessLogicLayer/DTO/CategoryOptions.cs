@@ -8,6 +8,6 @@ namespace BusinessLogicLayer.DTO
 {
     public enum CategoryOptions
     {
-        Electorins, HomeAppliances, Furniture, Accessories
+        Electronics, HomeAppliances, Furniture, Accessories
     }
 }
