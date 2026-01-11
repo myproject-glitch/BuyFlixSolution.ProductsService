@@ -26,7 +26,7 @@ namespace ProductsMicroService.API.Filter
                 dynamic? validator = _serviceProvider.GetService(validatorType);
                 if (validator == null) continue;
 
-                FluentValidation.Results.ValidationResult validationResult = await validator.ValidateAsync((dynamic)argument);
+               ValidationResult validationResult = await validator.ValidateAsync((dynamic)argument);
 
                 if (!validationResult.IsValid)
                 {
